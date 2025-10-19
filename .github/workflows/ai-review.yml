@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Load Prompt
+        id: prompt
+        run: |
+          PROMPT=$(cat .github/ai-review-prompt.txt | jq -Rs .)
+          echo "PROMPT=$PROMPT" >> $GITHUB_OUTPUT
+
       - name: Generate diff
         run: |
           git fetch origin ${{ github.base_ref }}
@@ -34,9 +40,8 @@ jobs:
             -d "{
               \"model\": \"gpt-4o-mini\",
               \"messages\": [
-                {\"role\": \"system\", \"content\": \"你是一名資深 Java Reviewer，請依 A/B/C/D 規範審查 diff...\"},
-                {\"role\": \"user\",   \"content\": \"以下為本次 PR diff，請開始審查：\"},
-                {\"role\": \"user\",   \"content\": $body}
+                {\"role\": \"system\", \"content\": ${{ steps.prompt.outputs.PROMPT }}},
+                {\"role\": \"user\",   \"content\": \"以下為本次 PR diff，請開始審查：\\n\\n$body\"}
               ]
             }")
 
