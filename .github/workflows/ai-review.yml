@@ -2,88 +2,78 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]   # PR 建立、更新、重新開啟時觸發
+    types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: write   # 允許貼 PR comment
-  issues: write          # (PR comment 實際上走 issues API)
-  contents: read         # 允許讀取 diff/檔案
+  pull-requests: write
+  issues: write
+  contents: read
 
 jobs:
   review:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4   # 取出 PR 原始碼
+      - uses: actions/checkout@v4
 
-      - name: Load Prompt           # 讀取審查規則 prompt 檔案 (外部抽離)
+      - name: Load Prompt
         id: prompt
         run: |
-          PROMPT=$(cat .github/ai-review-prompt.txt | jq -Rs .)   # jq -Rs -> 轉成合法 JSON 字串
-          echo "PROMPT=$PROMPT" >> $GITHUB_OUTPUT                 # 輸出到 steps 供後續引用
+          RAW=$(cat .github/ai-review-prompt.txt)
+          PROMPT=$(printf "%s" "$RAW" | jq -Rs .)
+          printf "PROMPT=%s\n" "$PROMPT" >> $GITHUB_OUTPUT
 
-      - name: Generate diff         # 產生此次 PR 的差異內容
+      - name: Generate diff
         run: |
-          git fetch origin ${{ github.base_ref }}                 # 更新 base branch
-          git diff origin/${{ github.base_ref }} --unified=3 > diff.patch   # 產生 unified diff
+          git fetch origin ${{ github.base_ref }}
+          git diff origin/${{ github.base_ref }} --unified=3 > diff.patch
 
-      - name: Call ChatGPT          # 呼叫 OpenAI API 審查 diff
+      - name: Call ChatGPT
         id: ai
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}           # 從 Secret 讀取 API key
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          SYS=${{ steps.prompt.outputs.PROMPT }}                  # 系統 prompt (審查規則)
-          DIFF=$(jq -Rs . diff.patch)                             # 將 diff 轉成 JSON string
+          SYS=${{ steps.prompt.outputs.PROMPT }}
+          DIFF=$(cat diff.patch)
 
-          # 用 jq -n 組合法 JSON -> 避免 heredoc/quote 破 JSON
           JSON=$(jq -n \
-            --argjson sys "$SYS" \
-            --argjson diff "$DIFF" \
+            --arg sys "$SYS" \
+            --arg diff "$DIFF" \
             '{
               model: "gpt-4o-mini",
               messages: [
-                {role:"system", content:$sys},                    # 指令規範
-                {role:"user", content:"以下為本次 PR diff，請開始審查："}, # 引導文字
-                {role:"user", content:$diff}                     # diff 內容本體
+                {role:"system", content:$sys},
+                {role:"user", content:"以下為本次 PR diff，請開始審查："},
+                {role:"user", content:$diff}
               ]
             }'
           )
 
-          # 呼叫 OpenAI Chat Completions API
           resp=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$JSON")
 
-          echo "=== RAW RESPONSE ==="     # debug 時能看到完整 JSON 回應
+          echo "=== RAW RESPONSE ==="
           echo "$resp"
 
-          content=$(echo "$resp" | jq -r '.choices[0].message.content // empty')  # 抓 AI 審查文字
-
-          # AI 若沒回內容，視為錯誤
+          content=$(echo "$resp" | jq -r '.choices[0].message.content // empty')
           if [ -z "$content" ]; then
             err=$(echo "$resp" | jq -r '.error.message // "OpenAI API Error"')
-            echo "REVIEW<<EOF" >> $GITHUB_OUTPUT
-            echo "$err" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            printf "REVIEW=%s\n" "$err" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-          # 將審查內容輸出讓下一步貼回 PR
-          echo "REVIEW<<EOF" >> $GITHUB_OUTPUT
-          echo "$content" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          printf "REVIEW=%s\n" "$content" >> $GITHUB_OUTPUT
 
-      - name: Add Comment to PR      # 將 AI 回覆貼成 PR 的留言
-        if: always()                 # 上面就算失敗也會執行 (錯誤訊息也會貼)
-        uses: actions/github-script@v7
+      - name: Add Comment to PR (safe)
+        if: always()
         env:
           REVIEW: ${{ steps.ai.outputs.REVIEW }}
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,  # 當前 PR 編號
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: process.env.REVIEW             # 審查內容貼入 PR 留言
-            })
+        run: |
+          jq -n --arg body "$REVIEW" '{body:$body}' > body.json
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @body.json \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${{ github.event.pull_request.number }}/comments"
