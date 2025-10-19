@@ -21,7 +21,7 @@ jobs:
         id: prompt
         run: |
           git fetch origin main
-          RAW=$(git show origin/main:.github/ai-review-prompt.txt)
+          RAW=$(git show origin/main:.github/workflows/ai-review-prompt.txt)
           PROMPT=$(printf "%s" "$RAW" | jq -Rs .)
           printf "PROMPT=%s\n" "$PROMPT" >> $GITHUB_OUTPUT
 
