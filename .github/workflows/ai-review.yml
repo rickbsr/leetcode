@@ -14,12 +14,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # 先 checkout PR branch（用於產 diff）
 
-      - name: Load Prompt
+      # === 這段改成讀 main 的 prompt，而不是 PR 的 ===
+      - name: Load Prompt from main
         id: prompt
         run: |
-          RAW=$(cat .github/ai-review-prompt.txt)
+          git fetch origin main
+          RAW=$(git show origin/main:.github/ai-review-prompt.txt)
           PROMPT=$(printf "%s" "$RAW" | jq -Rs .)
           printf "PROMPT=%s\n" "$PROMPT" >> $GITHUB_OUTPUT
 
@@ -63,7 +65,6 @@ jobs:
             printf "REVIEW=%s\n" "$err" >> $GITHUB_OUTPUT
             exit 1
           fi
-
           printf "REVIEW=%s\n" "$content" >> $GITHUB_OUTPUT
 
       - name: Add Comment to PR (safe)
