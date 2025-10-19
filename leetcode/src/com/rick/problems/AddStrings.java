@@ -22,6 +22,7 @@ class AddStringsBruteForce {
             sb.append(sum % 10);
             carry = sum / 10;
         }
+        sb = null;
         return sb.reverse().toString();
     }
 }
