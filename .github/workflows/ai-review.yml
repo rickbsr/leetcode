@@ -14,16 +14,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4   # 先 checkout PR branch（用於產 diff）
+      - uses: actions/checkout@v4
 
-      # === 這段改成讀 main 的 prompt，而不是 PR 的 ===
-      - name: Load Prompt from main
+      - name: Load Prompt from main branch
         id: prompt
         run: |
           git fetch origin main
           RAW=$(git show origin/main:.github/workflows/ai-review-prompt.txt)
           PROMPT=$(printf "%s" "$RAW" | jq -Rs .)
-          printf "PROMPT=%s\n" "$PROMPT" >> $GITHUB_OUTPUT
+          {
+            echo "PROMPT<<EOF"
+            echo "$PROMPT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Generate diff
         run: |
