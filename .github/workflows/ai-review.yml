@@ -65,10 +65,18 @@ jobs:
           content=$(echo "$resp" | jq -r '.choices[0].message.content // empty')
           if [ -z "$content" ]; then
             err=$(echo "$resp" | jq -r '.error.message // "OpenAI API Error"')
-            printf "REVIEW=%s\n" "$err" >> $GITHUB_OUTPUT
+            {
+              echo "REVIEW<<EOF"
+              echo "$err"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
             exit 1
           fi
-          printf "REVIEW=%s\n" "$content" >> $GITHUB_OUTPUT
+          {
+            echo "REVIEW<<EOF"
+            echo "$content"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Add Comment to PR (safe)
         if: always()
