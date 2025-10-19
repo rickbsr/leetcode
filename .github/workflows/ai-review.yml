@@ -32,24 +32,29 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          body=$(jq -Rs . diff.patch)
+          PROMPT=${{ steps.prompt.outputs.PROMPT }}
+          DIFF=$(jq -Rs . diff.patch)
+
+          JSON=$(cat <<EOF
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    { "role": "system", "content": $PROMPT },
+    { "role": "user", "content": "以下為本次 PR diff，請開始審查：\n\n$DIFF" }
+  ]
+}
+EOF
+)
 
           resp=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"gpt-4o-mini\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": ${{ steps.prompt.outputs.PROMPT }}},
-                {\"role\": \"user\",   \"content\": \"以下為本次 PR diff，請開始審查：\\n\\n$body\"}
-              ]
-            }")
+            -d "$JSON")
 
           echo "=== RAW RESPONSE ==="
           echo "$resp"
 
           content=$(echo "$resp" | jq -r '.choices[0].message.content // empty')
-
           if [ -z "$content" ]; then
             err=$(echo "$resp" | jq -r '.error.message // "OpenAI API Error"')
             echo "REVIEW<<EOF" >> $GITHUB_OUTPUT
