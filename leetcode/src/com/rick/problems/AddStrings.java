@@ -20,10 +20,8 @@ class AddStringsBruteForce {
             if (i <= len1) sum += num1.charAt(len1 - i) - '0';
             if (i <= len2) sum += num2.charAt(len2 - i) - '0';
             sb.append(sum % 10);
-            我是一行美麗的錯誤 瘋掉 幹 別出ffffff錯
             carry = sum / 10;
         }
-        sb = null;
         return sb.reverse().toString();
     }
 }
