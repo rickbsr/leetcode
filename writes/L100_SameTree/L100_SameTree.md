@@ -114,7 +114,7 @@ class Solution {
 
 當然可以；在良葛格的「[遞迴方法](https://openhome.cc/Gossip/JavaGossip-V1/RecursionMethod.htm)」一文中就有提到：「遞迴具有重複執行的特性，而可以使用遞迴求解的程式，實際上也可以使用迴圈來求解。」，如下：
 
-![](pic/L100_loop_recursive.png)
+![](pic/L100_loop-recursive.png)
 
 那該怎麼做呢？
 
